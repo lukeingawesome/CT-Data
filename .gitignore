@@ -1,0 +1,43 @@
+# Cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.cache/
+.pytest_cache/
+.coverage
+.tox/
+
+# NPZ files (numpy compressed arrays)
+*.npz
+
+# CSV files (data files)
+*.csv
+
+# Jupyter notebook files
+*.ipynb
+
+# Common additional ignores for data science projects
+.DS_Store
+.vscode/
+.idea/
+*.log
+*.tmp
+*.temp
+
+# Model checkpoints and weights
+*.pth
+*.pt
+*.h5
+*.pkl
+*.pickle
+
+# Data directories (uncomment if needed)
+# data/
+# datasets/
+# outputs/ 
+
+deepseek.py
+gemini.py
