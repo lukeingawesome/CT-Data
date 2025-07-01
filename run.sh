@@ -1,0 +1,42 @@
+python -m torch.distributed.launch --nproc_per_node=3 \
+	--use_env training/main.py \
+        --enable-deepspeed \
+        --grad-checkpointing \
+        --name="TILA" \
+        --local-loss \
+        --save-frequency 2  \
+        --zeroshot-frequency 1 \
+        --report-to="tensorboard, wandb" \
+        --wandb-project-name="TILA" \
+        --wandb-notes="TILA" \
+        --train-data "/data/csv/mimic_train.csv" \
+        --val-data "/data/csv/mimic_val.csv" \
+        --precision "bf16" \
+        --warmup 100 \
+        --batch-size=48 \
+        --eval-batch-size=48 \
+        --tila-loss 1 \
+        --log-every-n-steps 1000 \
+        --epochs=30 \
+        --lr=1e-4 \
+        --visual-lr=1e-4 \
+        --text-lr=1e-4 \
+        --projection-lr=1e-4 \
+        --wd=0.05 \
+        --visual-wd=0.05 \
+        --text-wd=0.05 \
+        --ld=1.0 \
+        --text-ld=1.01 \
+        --visual-ld=0.85 \
+        --grad-clip-norm=5.0 \
+        --smoothing=0. \
+        --workers=4 \
+        --seed 4096 \
+        --gather-with-grad \
+        --force-custom-clip \
+        --optimizer="ap_adamw" \
+        --zero-stage=1 \
+        --dataset-type "cxr" \
+        --csv-img-key "img_path" \
+        --csv-caption-key "caption_if_none" \
+

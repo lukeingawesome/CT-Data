@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=1 python finetune.py --train_csv ./chest_imagenome_train.csv --val_csv ./chest_imagenome_val.csv --output_dir /model/workspace/chest_imagenome_ours_base_ci2 --switch_mode True --loss_type TCL --wandb_name chest_imagenome_ours_base_ci2 --checkpoint_path /data/weights/tila/pytorch_model.bin
