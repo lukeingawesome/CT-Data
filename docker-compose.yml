@@ -1,0 +1,55 @@
+# NOTE: `version:` key removed – it is obsolete in Compose v2+
+
+services:
+  ct:
+    # ────────────────────────────────────────
+    # Image build
+    # ────────────────────────────────────────
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UID:       ${UID:-1000}
+        GID:       ${GID:-1000}
+        USERNAME:  ${USR:-user}
+
+    image: irail:ct_fm
+    container_name: ct
+
+    # ────────────────────────────────────────
+    # Runtime behaviour
+    # ────────────────────────────────────────
+    stdin_open: true          # <- enables `docker start -ai`
+    tty: true                 # <- ditto
+    init: true                # tiny init so ^C is handled
+
+    # keep both styles: old (<24) and new (24+) GPU wiring
+    runtime: nvidia           # ignored on Docker 24, required on ≤23
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 6
+              capabilities: [gpu]
+
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      PYTHONUNBUFFERED: "1"
+      NCCL_P2P_DISABLE: "1"
+
+    shm_size: 64gb            # large /dev/shm for MONAI 3‑D workloads
+
+    # ────────────────────────────────────────
+    # Volumes  ❗  DO NOT share ~/.vscode‑server
+    # ────────────────────────────────────────
+    volumes:
+      - .:${PROJECT_ROOT:-/opt/project}
+      - /BARO_Cluster/data/data:/data          # read‑only data
+      - ${HOME}:/home/${USR:-user}             # home directory (ssh keys, etc.)
+
+    working_dir: ${PROJECT_ROOT:-/opt/project}
+
+    # Interactive login shell keeps the container running
+    command: [ "/bin/bash", "--login" ]

@@ -37,7 +37,7 @@ def get_grad_norm_(parameters, norm_type: float = 2.0) -> torch.Tensor:
 def save_model(model, epoch, args):
     """Save model checkpoint."""
     if args.logs and args.logs.lower() != 'none' and args.enable_deepspeed:
-        deepspeed_checkpoint_path = os.path.join('/model/saved_models', "checkpoints")
+        deepspeed_checkpoint_path = os.path.join('./checkpoints/saved_models', "checkpoints")
         client_state = {'epoch': epoch}
         checkpoint_tag = f"epoch_{epoch}"
         if dist.is_initialized():

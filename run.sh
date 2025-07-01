@@ -1,16 +1,16 @@
-python -m torch.distributed.launch --nproc_per_node=3 \
+python3 -m torch.distributed.launch --nproc_per_node=4 \
 	--use_env training/main.py \
         --enable-deepspeed \
         --grad-checkpointing \
-        --name="TILA" \
+        --name="TOY-CT" \
         --local-loss \
-        --save-frequency 2  \
+        --save-frequency 4  \
         --zeroshot-frequency 1 \
         --report-to="tensorboard, wandb" \
-        --wandb-project-name="TILA" \
-        --wandb-notes="TILA" \
-        --train-data "/data/csv/mimic_train.csv" \
-        --val-data "/data/csv/mimic_val.csv" \
+        --wandb-project-name="TOY-CT" \
+        --wandb-notes="TOY-CT-Training" \
+        --train-data "./csv/toy_ct.csv" \
+        --val-data "./csv/toy_ct.csv" \
         --precision "bf16" \
         --warmup 100 \
         --batch-size=48 \
@@ -30,13 +30,15 @@ python -m torch.distributed.launch --nproc_per_node=3 \
         --visual-ld=0.85 \
         --grad-clip-norm=5.0 \
         --smoothing=0. \
+        --llm2vec-path "/data/research/checkpoint-4896" \
         --workers=4 \
         --seed 4096 \
         --gather-with-grad \
         --force-custom-clip \
         --optimizer="ap_adamw" \
         --zero-stage=1 \
-        --dataset-type "cxr" \
+        --dataset-type "ct" \
         --csv-img-key "img_path" \
-        --csv-caption-key "caption_if_none" \
+        --csv-caption-key "findings" \
+        --split-column "split" \
 

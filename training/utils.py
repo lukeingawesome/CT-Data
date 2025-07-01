@@ -1,8 +1,9 @@
 """
-adept from https://vissl.readthedocs.io/en/v0.1.6/_modules/vissl/utils/io.html#save_file
+Simplified file saving utility without iopath dependency.
 """
 
-from iopath.common.file_io import file_lock, g_pathmgr
+import json
+import pickle
 import yaml
 import numpy as np
 import logging
@@ -19,24 +20,28 @@ def save_file(data, filename, append_to_json=True, verbose=True):
 
     if verbose:
         logging.info(f"Saving data to file: {filename}")
+    
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    
     file_ext = os.path.splitext(filename)[1]
     if file_ext in [".pkl", ".pickle"]:
-        with g_pathmgr.open(filename, "wb") as fopen:
+        with open(filename, "wb") as fopen:
             pickle.dump(data, fopen, pickle.HIGHEST_PROTOCOL)
     elif file_ext == ".npy":
-        with g_pathmgr.open(filename, "wb") as fopen:
+        with open(filename, "wb") as fopen:
             np.save(fopen, data)
     elif file_ext == ".json":
         if append_to_json:
-            with g_pathmgr.open(filename, "a") as fopen:
+            with open(filename, "a") as fopen:
                 fopen.write(json.dumps(data, sort_keys=True) + "\n")
                 fopen.flush()
         else:
-            with g_pathmgr.open(filename, "w") as fopen:
+            with open(filename, "w") as fopen:
                 fopen.write(json.dumps(data, sort_keys=True) + "\n")
                 fopen.flush()
     elif file_ext == ".yaml":
-        with g_pathmgr.open(filename, "w") as fopen:
+        with open(filename, "w") as fopen:
             dump = yaml.dump(data)
             fopen.write(dump)
             fopen.flush()

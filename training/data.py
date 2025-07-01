@@ -3,6 +3,7 @@ import re
 from dataclasses import dataclass
 from multiprocessing import Value
 from pathlib import Path
+from typing import Optional, List, Dict, Any
 
 import numpy as np
 import pandas as pd
@@ -13,12 +14,19 @@ from torch.utils.data.distributed import DistributedSampler
 from health_multimodal.image.data.io import load_image
 from .distributed import is_master
 
+# Add MONAI imports (simplified)
+try:
+    import monai
+    from monai.data.dataloader import DataLoader as MonaiDataLoader
+    MONAI_AVAILABLE = True
+except ImportError:
+    MONAI_AVAILABLE = False
+    MonaiDataLoader = DataLoader
+
 import warnings
 warnings.filterwarnings("ignore")
-# from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True # Truncated File Read
 Image.MAX_IMAGE_PIXELS = None # DecompressionBombWarning
-ImageFile.MAX_IMAGE_PIXELS = None
 
 def shuffle_sentences(text, probability=0.5):
     # Split the text into sentences using a regex to account for periods that end sentences
@@ -32,6 +40,7 @@ def shuffle_sentences(text, probability=0.5):
     # Join the shuffled sentences back into a single string
     shuffled_text = ' '.join(sentences)
     return shuffled_text
+
 
 class CustomCSVDataset(Dataset):
     def __init__(self, csv_file, transform=None, img_key='image_path', caption_key='caption', 
@@ -121,44 +130,97 @@ class CustomCSVDataset(Dataset):
         return prev_image, cur_image, caption, hard_caption, oid, label
     
     def _get_ct_item(self, row, idx):
-        """Get CT single scan item"""
+        """Get CT single scan item with enhanced NPZ loading and validation."""
         img_path = row[self.img_key]
         caption = row[self.caption_key]
+        
+        # Validate image path
+        if pd.isna(img_path) or not isinstance(img_path, str):
+            raise ValueError(f"Invalid image path at index {idx}: {img_path}")
+        
+        img_path_obj = Path(img_path)
+        if not img_path_obj.exists():
+            raise FileNotFoundError(f"Image file not found: {img_path}")
         
         # Load image from NPZ file (for CT scans)
         try:
             if str(img_path).endswith('.npz'):
                 # Load NPZ file (CT scan format)
-                arr = np.load(img_path)["image"]  # (C, D, H, W) float16
-                image = torch.from_numpy(arr).float()  # cast to float32 for gradients
+                # Expected format: (C, D, H, W) where C>=1 (HU windows)
+                with np.load(img_path) as npz_file:
+                    if "image" not in npz_file:
+                        raise KeyError(f"'image' key not found in NPZ file: {img_path}")
+                    
+                    arr = npz_file["image"]  # (C, D, H, W) float16/32
+                    
+                    # Validate array shape
+                    if arr.ndim != 4:
+                        raise ValueError(f"Expected 4D array (C, D, H, W), got {arr.ndim}D in {img_path}")
+                    
+                    if arr.shape[0] < 1:
+                        raise ValueError(f"Expected at least 1 channel, got {arr.shape[0]} in {img_path}")
+                    
+                    # Convert to tensor with proper dtype
+                    image = torch.from_numpy(arr.copy()).float()  # cast to float32 for gradients
+                    
+                    # Log volume info for debugging (only occasionally to avoid spam)
+                    if idx % 100 == 0 and hasattr(self, '_debug_logging'):
+                        print(f"Loaded CT volume {idx}: shape={image.shape}, "
+                              f"dtype={image.dtype}, range=[{image.min():.2f}, {image.max():.2f}]")
+                
+                # Apply CT-specific transforms if provided
+                if self.transform:
+                    try:
+                        image = self.transform(image)
+                    except Exception as e:
+                        raise RuntimeError(f"Transform failed for {img_path}: {e}")
+                
             else:
-                # Load regular image file
-                image = load_image(img_path)
+                # Fallback for regular image files (though not typical for CT)
+                image = load_image(img_path_obj)
                 if self.transform:
                     image = self.transform(image)
+                    
         except Exception as e:
-            raise RuntimeError(f"Failed to load image from {img_path}: {e}")
+            # Provide more detailed error information
+            error_msg = (f"Failed to load image from {img_path} at index {idx}: "
+                        f"{type(e).__name__}: {str(e)}")
+            if self.is_train:
+                # During training, log error but continue with a dummy sample
+                print(f"Warning: {error_msg}")
+                # Create a zero tensor with expected shape after transforms
+                expected_shape = (1, 224, 224, 160)  # (C, H, W, D)
+                if self.transform and hasattr(self.transform, 'target_size'):
+                    expected_shape = (1, *self.transform.target_size)
+                image = torch.zeros(expected_shape, dtype=torch.float32)
+                caption = "Error loading medical scan"
+            else:
+                # During validation/testing, raise the error
+                raise RuntimeError(error_msg)
         
         # Handle missing or NaN findings
         if pd.isna(caption) or not isinstance(caption, str):
             caption = "Medical scan findings"  # Default placeholder
         
+        # Clean and validate caption
+        caption = str(caption).strip()
+        if len(caption) == 0:
+            caption = "Medical scan findings"
+        
+        # Apply text augmentation for training
         if self.is_train:
             caption = shuffle_sentences(caption, probability=0.2)
         
-        # Create metadata
+        # Create metadata (optional, can be useful for debugging)
         meta = {
-            "id": Path(img_path).stem,
-            "img_path": img_path,
-            "idx": idx
+            "id": img_path_obj.stem,
+            "img_path": str(img_path),
+            "idx": idx,
+            "shape": tuple(image.shape) if isinstance(image, torch.Tensor) else None
         }
         
-        # Return format compatible with CT training
-        return {
-            "image": image,
-            "text": str(caption),
-            "meta": meta
-        }
+        # Return format compatible with training
+        return image, str(caption)
     
     def collate_fn(self, batch):
         """Collate function that handles both CXR and CT data formats"""
@@ -191,34 +253,55 @@ class CustomCSVDataset(Dataset):
         return prev_images, cur_images, captions, hard_captions, oids, labels
     
     def _collate_ct(self, batch):
-        """Collate function for CT single scan data"""
+        """Collate function for CT single scan data with enhanced error handling."""
+        if not batch:
+            raise ValueError("Empty batch provided to collate function")
+        
         images = []
         texts = []
-        metas = []
         
-        for item in batch:
-            images.append(item["image"])
-            texts.append(item["text"])
-            metas.append(item["meta"])
+        for i, item in enumerate(batch):
+            if len(item) != 2:
+                raise ValueError(f"Expected (image, text) tuple, got {len(item)} items at batch index {i}")
+            
+            image, text = item
+            
+            # Validate image tensor
+            if not isinstance(image, torch.Tensor):
+                raise TypeError(f"Expected torch.Tensor for image at batch index {i}, got {type(image)}")
+            
+            if image.dim() != 4:
+                raise ValueError(f"Expected 4D image tensor at batch index {i}, got {image.dim()}D")
+            
+            # Validate text
+            if not isinstance(text, str):
+                text = str(text)  # Convert to string if possible
+            
+            images.append(image)
+            texts.append(text)
         
-        # Stack images
-        images = torch.stack(images)
+        # Stack images with error handling
+        try:
+            images = torch.stack(images)
+        except Exception as e:
+            # Provide detailed information about tensor shapes for debugging
+            shapes = [img.shape for img in images]
+            raise RuntimeError(f"Failed to stack images. Shapes: {shapes}. Error: {e}")
         
         # Tokenize texts if tokenizer is provided
         if self.tokenizer:
-            texts = self.tokenizer(
-                texts,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=self.max_length,
-            )
+            try:
+                texts = self.tokenizer(
+                    texts,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
+                    max_length=self.max_length,
+                )
+            except Exception as e:
+                raise RuntimeError(f"Failed to tokenize texts: {e}")
         
-        return {
-            "image": images,
-            "text": texts,
-            "meta": metas
-        }
+        return images, texts
 
 class SharedEpoch:
     def __init__(self, epoch: int = 0):
@@ -234,8 +317,8 @@ class SharedEpoch:
 @dataclass
 class DataInfo:
     dataloader: DataLoader
-    sampler: DistributedSampler = None
-    shared_epoch: SharedEpoch = None
+    sampler: Optional[DistributedSampler] = None
+    shared_epoch: Optional[SharedEpoch] = None
 
     def set_epoch(self, epoch):
         if self.shared_epoch is not None:
@@ -312,6 +395,47 @@ def get_retrieval_dataset(args, preprocess_fn, is_train=False, tokenizer=None,
     dataloader = DataLoader(
         dataset,
         batch_size=args.eval_batch_size,
+        shuffle=shuffle,
+        num_workers=args.workers,
+        pin_memory=True,
+        sampler=sampler,
+        drop_last=is_train,
+        collate_fn=dataset.collate_fn
+    )
+    dataloader.num_samples = num_samples
+    dataloader.num_batches = len(dataloader)
+
+    return DataInfo(dataloader, sampler)
+
+def get_ct_dataset(args, preprocess_fn, is_train, epoch=0, tokenizer=None):
+    """Get CT dataset with proper transforms and collation."""
+    input_filename = args.train_data if is_train else args.val_data
+    assert input_filename
+    
+    # Set up parameters for CT mode
+    split = getattr(args, 'train_split', 'train') if is_train else getattr(args, 'val_split', 'val')
+    img_key = getattr(args, 'csv_img_key', 'img_path')
+    caption_key = getattr(args, 'csv_caption_key', 'findings')
+    split_column = getattr(args, 'split_column', 'split')
+    
+    dataset = CustomCSVDataset(
+        csv_file=input_filename,
+        transform=preprocess_fn,
+        img_key=img_key,
+        caption_key=caption_key,
+        tokenizer=tokenizer,
+        is_train=is_train,
+        dataset_mode='ct',
+        split=split,
+        split_column=split_column)
+    
+    num_samples = len(dataset)
+    sampler = DistributedSampler(dataset) if args.distributed and is_train else None
+    shuffle = is_train and sampler is None
+
+    dataloader = DataLoader(
+        dataset,
+        batch_size=args.batch_size,
         shuffle=shuffle,
         num_workers=args.workers,
         pin_memory=True,

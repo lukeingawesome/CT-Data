@@ -71,8 +71,8 @@ def parse_args(args):
     )
     parser.add_argument(
         "--dataset-type",
-        choices=["webdataset", "csv", "synthetic", "auto","json", "cxr"],
-        default="cxr",
+        choices=["cxr", "ct"],
+        default="ct",
         help="Which type of dataset to process."
     )
     parser.add_argument(
@@ -148,6 +148,24 @@ def parse_args(args):
         help="For csv-like datasets, the name of the key for the captions."
     )
     parser.add_argument(
+        "--split-column",
+        type=str,
+        default="split",
+        help="For csv-like datasets, the name of the column for data splits."
+    )
+    parser.add_argument(
+        "--train-split",
+        type=str,
+        default="train",
+        help="For csv-like datasets, the value in split column for training data."
+    )
+    parser.add_argument(
+        "--val-split",
+        type=str,
+        default="val",
+        help="For csv-like datasets, the value in split column for validation data."
+    )
+    parser.add_argument(
         "--imagenet-val",
         type=str,
         default=None,
@@ -174,7 +192,7 @@ def parse_args(args):
     parser.add_argument(
         "--logs",
         type=str,
-        default="/model/workspace/",
+        default="/opt/project/logs",
         help="Where to store tensorboard logs. Use None to avoid storing logs.",
     )
     parser.add_argument(
