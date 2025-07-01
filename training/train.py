@@ -166,13 +166,26 @@ def train_one_epoch(model, tokenizer, data, epoch, optimizer, scaler, scheduler,
             optimizer.zero_grad()
     
         with autocast():
-            image_features = model.visual(cur_images, prev_images).projected_global_embedding
+            # For Merlin model with ImageEmbedding=True, we only pass the current images
+            # The model expects only image input, not text input
+            image_features = model.visual(cur_images)
             
             captions = captions.to(device)
             # Get text features and ensure consistent dtype
-            text_features = model.text.model(captions)
+            # Handle both regular captions and tokenized captions with embed_mask
+            if isinstance(captions, dict) and 'embed_mask' in captions:
+                # Tokenized captions with embed_mask for LLM2Vec
+                text_features = model.text.model(captions)
+            else:
+                # Regular captions - tokenize them
+                text_features = model.text.model(captions)
             # Explicitly cast to the same dtype as image_features
             text_features = model.text.projection(text_features.to(dtype=cast_dtype))
+            
+            # Apply vision projection if available (to match text features dimension)
+            if hasattr(model, 'vision_projection') and model.vision_projection is not None:
+                image_features = model.vision_projection(image_features)
+            
             # Just use the loss value without capturing accuracy metrics
             total_loss = loss(image_features, text_features, model.logit_scale, model.logit_bias)
 
@@ -326,9 +339,21 @@ def evaluate(model, tokenizer, data, epoch, args, tb_writer=None):
                 captions = captions.to(device)
                 
                 with autocast():
-                    image_features = model.visual(cur_images, prev_images).projected_global_embedding
-                    text_features = model.text.model.forward(captions)
+                    # For Merlin model with ImageEmbedding=True, we only pass the current images
+                    image_features = model.visual(cur_images)
+                    # Handle both regular captions and tokenized captions with embed_mask
+                    if isinstance(captions, dict) and 'embed_mask' in captions:
+                        # Tokenized captions with embed_mask for LLM2Vec
+                        text_features = model.text.model.forward(captions)
+                    else:
+                        # Regular captions - tokenize them
+                        text_features = model.text.model.forward(captions)
                     text_features = model.text.projection(text_features.to(dtype=cast_dtype))
+                    
+                    # Apply vision projection if available (to match text features dimension)
+                    if hasattr(model, 'vision_projection') and model.vision_projection is not None:
+                        image_features = model.vision_projection(image_features)
+                    
                     all_image_features.append(image_features.cpu())
                     all_text_features.append(text_features.cpu())
                     

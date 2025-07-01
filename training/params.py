@@ -148,6 +148,12 @@ def parse_args(args):
         help="For csv-like datasets, the name of the key for the captions."
     )
     parser.add_argument(
+        "--text-separator",
+        type=str,
+        default=" [SEP] ",
+        help="For text processing, the separator used to split text for embed_mask creation."
+    )
+    parser.add_argument(
         "--split-column",
         type=str,
         default="split",
@@ -315,6 +321,18 @@ def parse_args(args):
         "--pretrained-text-model",
         default=None,
         help="pretrained model.text."
+    )
+    parser.add_argument(
+        "--text-base",
+        type=str,
+        default="microsoft/DialoGPT-medium",
+        help="Base model name for text encoder."
+    )
+    parser.add_argument(
+        "--model-pth",
+        type=str,
+        default=None,
+        help="Path to model checkpoint file."
     )
     parser.add_argument(
         "--llm2vec-path",

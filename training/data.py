@@ -44,7 +44,8 @@ def shuffle_sentences(text, probability=0.5):
 
 class CustomCSVDataset(Dataset):
     def __init__(self, csv_file, transform=None, img_key='image_path', caption_key='caption', 
-                 tokenizer=None, is_train=True, dataset_mode='cxr', split=None, split_column='split'):
+                 tokenizer=None, is_train=True, dataset_mode='cxr', split=None, split_column='split',
+                 separator=" [SEP] "):
         """
         Flexible CSV dataset that supports both CXR temporal data and CT single scan data.
         
@@ -75,6 +76,7 @@ class CustomCSVDataset(Dataset):
         self.is_train = is_train
         self.dataset_mode = dataset_mode.lower()
         self.max_length = 256
+        self.separator = separator
         
         # Validate required columns based on dataset mode
         if self.dataset_mode == 'cxr':
@@ -258,7 +260,7 @@ class CustomCSVDataset(Dataset):
             raise ValueError("Empty batch provided to collate function")
         
         images = []
-        texts = []
+        captions = []
         
         for i, item in enumerate(batch):
             if len(item) != 2:
@@ -278,7 +280,7 @@ class CustomCSVDataset(Dataset):
                 text = str(text)  # Convert to string if possible
             
             images.append(image)
-            texts.append(text)
+            captions.append(text)
         
         # Stack images with error handling
         try:
@@ -291,15 +293,55 @@ class CustomCSVDataset(Dataset):
         # Tokenize texts if tokenizer is provided
         if self.tokenizer:
             try:
-                texts = self.tokenizer(
-                    texts,
+                # Handle text with separator and create embed_mask for LLM2Vec
+                texts_2 = []
+                original_texts = []
+                
+                for text in captions:
+                    t = text.split(self.separator)
+                    texts_2.append(t[1] if len(t) > 1 else "")
+                    original_texts.append("".join(t))
+
+                original = self.tokenizer(
+                    original_texts,
                     return_tensors="pt",
                     padding=True,
                     truncation=True,
                     max_length=self.max_length,
                 )
+                
+                embed_mask = None
+                for t_i, t in enumerate(texts_2):
+                    ids = self.tokenizer(
+                        [t],
+                        return_tensors="pt",
+                        padding=True,
+                        truncation=True,
+                        max_length=self.max_length,
+                        add_special_tokens=False,
+                    )
+                    if embed_mask is None:
+                        e_m = torch.zeros_like(original["attention_mask"][t_i])
+                        if len(ids["input_ids"][0]) > 0:
+                            e_m[-len(ids["input_ids"][0]) :] = torch.ones(
+                                len(ids["input_ids"][0])
+                            )
+                        embed_mask = e_m.unsqueeze(0)
+                    else:
+                        e_m = torch.zeros_like(original["attention_mask"][t_i])
+                        if len(ids["input_ids"][0]) > 0:
+                            e_m[-len(ids["input_ids"][0]) :] = torch.ones(
+                                len(ids["input_ids"][0])
+                            )
+                        embed_mask = torch.cat((embed_mask, e_m.unsqueeze(0)), dim=0)
+
+                original["embed_mask"] = embed_mask
+                texts = original
+                
             except Exception as e:
                 raise RuntimeError(f"Failed to tokenize texts: {e}")
+        else:
+            texts = captions
         
         return images, texts
 
@@ -370,12 +412,14 @@ def get_retrieval_dataset(args, preprocess_fn, is_train=False, tokenizer=None,
         img_key = getattr(args, 'csv_img_key', 'img_path')
         caption_key = getattr(args, 'csv_caption_key', 'findings')
         split_column = getattr(args, 'split_column', 'split')
+        separator = getattr(args, 'text_separator', '!@#$%^&*()')
     else:
         # CXR mode parameters (default)
         split = None
         split_column = 'split'
         img_key = args.csv_img_key
         caption_key = args.csv_caption_key
+        separator = getattr(args, 'text_separator', '!@#$%^&*()')
     
     dataset = CustomCSVDataset(
         csv_file=input_filename,
@@ -386,7 +430,8 @@ def get_retrieval_dataset(args, preprocess_fn, is_train=False, tokenizer=None,
         is_train=is_train,
         dataset_mode=dataset_mode,
         split=split,
-        split_column=split_column)
+        split_column=split_column,
+        separator=separator)
     
     num_samples = len(dataset)
     sampler = DistributedSampler(dataset) if args.distributed and is_train else None
@@ -417,6 +462,7 @@ def get_ct_dataset(args, preprocess_fn, is_train, epoch=0, tokenizer=None):
     img_key = getattr(args, 'csv_img_key', 'img_path')
     caption_key = getattr(args, 'csv_caption_key', 'findings')
     split_column = getattr(args, 'split_column', 'split')
+    separator = getattr(args, 'text_separator', '!@#$%^&*()')
     
     dataset = CustomCSVDataset(
         csv_file=input_filename,
@@ -427,7 +473,8 @@ def get_ct_dataset(args, preprocess_fn, is_train, epoch=0, tokenizer=None):
         is_train=is_train,
         dataset_mode='ct',
         split=split,
-        split_column=split_column)
+        split_column=split_column,
+        separator=separator)
     
     num_samples = len(dataset)
     sampler = DistributedSampler(dataset) if args.distributed and is_train else None

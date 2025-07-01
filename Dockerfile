@@ -101,7 +101,7 @@ RUN --mount=type=cache,sharing=locked,target=/root/.cache/pip \
         "transformers>=4.38.2" \
         nibabel nltk \
         pandas tqdm matplotlib opencv-python \
-        timm wandb scikit-image iopath
+        timm wandb scikit-image iopath tensorboard
 
 
 # ────────────────────────────────────────────────────────────────

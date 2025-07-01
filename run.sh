@@ -13,8 +13,8 @@ python3 -m torch.distributed.launch --nproc_per_node=4 \
         --val-data "./csv/toy_ct.csv" \
         --precision "bf16" \
         --warmup 100 \
-        --batch-size=48 \
-        --eval-batch-size=48 \
+        --batch-size=8 \
+        --eval-batch-size=8 \
         --tila-loss 1 \
         --log-every-n-steps 1000 \
         --epochs=30 \
@@ -27,10 +27,10 @@ python3 -m torch.distributed.launch --nproc_per_node=4 \
         --text-wd=0.05 \
         --ld=1.0 \
         --text-ld=1.01 \
-        --visual-ld=0.85 \
+        --visual-ld=1.0 \
         --grad-clip-norm=5.0 \
         --smoothing=0. \
-        --llm2vec-path "/data/research/checkpoint-4896" \
+        --model-pth "/data/research/checkpoint-4896/pytorch_model.bin" \
         --workers=4 \
         --seed 4096 \
         --gather-with-grad \
@@ -40,5 +40,9 @@ python3 -m torch.distributed.launch --nproc_per_node=4 \
         --dataset-type "ct" \
         --csv-img-key "img_path" \
         --csv-caption-key "findings" \
+        --text-separator " [SEP] " \
         --split-column "split" \
+        --train-split "train" \
+        --val-split "val" \
+        --text-base "microsoft/LLM2CLIP-Llama-3.2-1B-Instruct-CC-Finetuned" \
 

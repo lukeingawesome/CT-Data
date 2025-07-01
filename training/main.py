@@ -196,8 +196,9 @@ def main(args):
             torch_dtype=torch.bfloat16,
         )
 
-    ckpt = torch.load(args.model_pth)
-    text_model.load_state_dict(ckpt, strict=False)
+    if args.model_pth is not None:
+        ckpt = torch.load(args.model_pth)
+        text_model.load_state_dict(ckpt, strict=False)
     text_model.to(device)
 
     # Ensure projection layer uses the same dtype as the text model

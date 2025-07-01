@@ -199,14 +199,24 @@ def get_assigner(args, model):
     visual_ld = args.visual_ld if args.visual_ld else args.ld
     text_ld = args.text_ld if args.text_ld else args.ld
     
+    # Handle Merlin visual model (doesn't have get_num_layers method)
     if visual_ld < 1.0:
-        visual_num_layers = model.visual.get_num_layers()
+        if hasattr(model.visual, 'get_num_layers'):
+            visual_num_layers = model.visual.get_num_layers()
+        else:
+            # For Merlin model, use a default number of layers or skip layer decay
+            visual_num_layers = 12  # Default for most vision models
         assigner_visual = LayerDecayValueAssigner(list(visual_ld ** (visual_num_layers + 1 - i) for i in range(visual_num_layers + 2)))
     else:
         assigner_visual = None
 
+    # Handle text model
     if text_ld < 1.0:
-        text_num_layers = model.text.get_num_layers()
+        if hasattr(model.text, 'get_num_layers'):
+            text_num_layers = model.text.get_num_layers()
+        else:
+            # For wrapped text models, use a default or skip layer decay
+            text_num_layers = 12  # Default for most transformer models
         assigner_text = LayerDecayValueAssigner(list(text_ld ** (text_num_layers + 1 - i) for i in range(text_num_layers + 2)))
     else:
         assigner_text = None
@@ -219,19 +229,43 @@ def get_assigner(args, model):
 
 def get_all_parameters(args, model):
     assigner_visual, assigner_text = get_assigner(args, model)
-        
-    parameters = []
+    
+    # Track which parameters have been processed to avoid duplicates
+    processed_params = set()
+    all_parameters = []
+    
+    # Process visual parameters first
     visual_parameters = get_parameters(args, model, assigner_visual, 'visual')
+    for param_group in visual_parameters:
+        for param in param_group['params']:
+            processed_params.add(param)
+    all_parameters.extend(visual_parameters)
+    
+    # Process text parameters (only those not already processed)
     text_parameters = get_parameters(args, model, assigner_text, 'text')
+    for param_group in text_parameters:
+        # Filter out already processed parameters
+        param_group['params'] = [param for param in param_group['params'] if param not in processed_params]
+        for param in param_group['params']:
+            processed_params.add(param)
+        if param_group['params']:  # Only add non-empty groups
+            all_parameters.append(param_group)
+    
+    # Process other parameters (only those not already processed)
     other_parameters = get_parameters(args, model, None, 'other')
+    for param_group in other_parameters:
+        # Filter out already processed parameters
+        param_group['params'] = [param for param in param_group['params'] if param not in processed_params]
+        for param in param_group['params']:
+            processed_params.add(param)
+        if param_group['params']:  # Only add non-empty groups
+            all_parameters.append(param_group)
 
-    parameters.extend(visual_parameters)
-    parameters.extend(text_parameters)
-    parameters.extend(other_parameters)
-
-    if len(parameters) == 0:
-        parameters = model.parameters()
-    return parameters
+    if len(all_parameters) == 0:
+        # Fallback to simple parameter grouping
+        all_parameters = [{'params': list(model.parameters())}]
+    
+    return all_parameters
 
 def create_optimizer(args, model, return_params=False):
     optimizer_args = dict(
