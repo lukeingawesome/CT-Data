@@ -1,4 +1,4 @@
-python3 -m torch.distributed.launch --nproc_per_node=4 \
+python3 -m torch.distributed.launch --nproc_per_node=6 \
 	--use_env training/main.py \
         --enable-deepspeed \
         --grad-checkpointing \
@@ -7,14 +7,14 @@ python3 -m torch.distributed.launch --nproc_per_node=4 \
         --save-frequency 4  \
         --zeroshot-frequency 1 \
         --report-to="tensorboard, wandb" \
-        --wandb-project-name="TOY-CT" \
-        --wandb-notes="TOY-CT-Training" \
-        --train-data "./csv/toy_ct.csv" \
-        --val-data "./csv/toy_ct.csv" \
+        --wandb-project-name="CT-SIGLIP" \
+        --wandb-notes="CT-Training" \
+        --train-data "./csv/all_ct.csv" \
+        --val-data "./csv/all_ct.csv" \
         --precision "bf16" \
         --warmup 100 \
-        --batch-size=8 \
-        --eval-batch-size=8 \
+        --batch-size=12 \
+        --eval-batch-size=12 \
         --tila-loss 1 \
         --log-every-n-steps 1000 \
         --epochs=30 \
@@ -40,7 +40,7 @@ python3 -m torch.distributed.launch --nproc_per_node=4 \
         --dataset-type "ct" \
         --csv-img-key "img_path" \
         --csv-caption-key "findings" \
-        --text-separator " [SEP] " \
+        --text-separator "!@#$%^&*()" \
         --split-column "split" \
         --train-split "train" \
         --val-split "val" \

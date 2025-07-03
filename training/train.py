@@ -186,6 +186,10 @@ def train_one_epoch(model, tokenizer, data, epoch, optimizer, scaler, scheduler,
             if hasattr(model, 'vision_projection') and model.vision_projection is not None:
                 image_features = model.vision_projection(image_features)
             
+            # Normalize embeddings before calculating SigLip loss
+            image_features = F.normalize(image_features, dim=-1)
+            text_features = F.normalize(text_features, dim=-1)
+            
             # Just use the loss value without capturing accuracy metrics
             total_loss = loss(image_features, text_features, model.logit_scale, model.logit_bias)
 
@@ -354,6 +358,10 @@ def evaluate(model, tokenizer, data, epoch, args, tb_writer=None):
                     if hasattr(model, 'vision_projection') and model.vision_projection is not None:
                         image_features = model.vision_projection(image_features)
                     
+                    # Normalize embeddings before calculating SigLip loss
+                    image_features = F.normalize(image_features, dim=-1)
+                    text_features = F.normalize(text_features, dim=-1)
+                    
                     all_image_features.append(image_features.cpu())
                     all_text_features.append(text_features.cpu())
                     
@@ -416,6 +424,10 @@ def evaluate(model, tokenizer, data, epoch, args, tb_writer=None):
 
 def get_metrics(image_features, text_features, logit_scale, epoch, oids=None):
     metrics = {}
+    # Normalize embeddings for retrieval metrics calculation
+    image_features = F.normalize(image_features, dim=-1)
+    text_features = F.normalize(text_features, dim=-1)
+    
     logits_per_image = (logit_scale * image_features @ text_features.t()).detach().cpu()
     logits_per_text = logits_per_image.t().detach().cpu()
 

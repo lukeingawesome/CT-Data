@@ -19,9 +19,12 @@ try:
     import monai
     from monai.data.dataloader import DataLoader as MonaiDataLoader
     MONAI_AVAILABLE = True
+    from ct_transform import get_train_transform, get_val_transform
 except ImportError:
     MONAI_AVAILABLE = False
     MonaiDataLoader = DataLoader
+# -------------------------------------------------
+
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -75,7 +78,7 @@ class CustomCSVDataset(Dataset):
         self.tokenizer = tokenizer
         self.is_train = is_train
         self.dataset_mode = dataset_mode.lower()
-        self.max_length = 256
+        self.max_length = 512
         self.separator = separator
         
         # Validate required columns based on dataset mode
@@ -516,3 +519,6 @@ def get_data(args, preprocess_fns, epoch=0, tokenizer=None):
             args, preprocess_val, is_train=False, tokenizer=tokenizer)
 
     return data
+
+
+

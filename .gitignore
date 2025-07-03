@@ -40,5 +40,14 @@ __pycache__/
 # datasets/
 # outputs/ 
 
+# All wandb files
+wandb/
+wandb/*
+# All tensorboard files
+tensorboard/
+
+
+
 deepseek.py
 gemini.py
+wandb/*

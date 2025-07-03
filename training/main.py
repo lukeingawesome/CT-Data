@@ -29,6 +29,7 @@ from training.train import train_one_epoch, evaluate, extract_features
 from training.optim import create_optimizer, get_all_parameters
 from llm2vec_wrapper import LLM2VecWrapper as LLM2Vec
 from transformers import AutoTokenizer, AutoModel
+from ct_transform import get_train_transform, get_val_transform
 
 # Add imports for Merlin instead of BioVIL-T
 from merlin import Merlin
@@ -97,12 +98,12 @@ def random_seed(seed=42, rank=0):
     random.seed(seed + rank)
 
 def get_ct_transforms(target_size=(224, 224, 160)):
-    """Simple CT transforms that return identity transforms for now."""
-    # For now, return identity transforms - this can be enhanced later
-    def identity_transform(image):
-        return image
+    """Get CT transforms for training and validation."""
+    # Import the transform functions
+    from ct_transform import get_train_transform, get_val_transform
     
-    return identity_transform, identity_transform
+    # Return the actual transform functions (not the function references)
+    return get_train_transform(), get_val_transform()
 
 def main(args):
     
