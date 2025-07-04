@@ -295,8 +295,8 @@ def train_one_epoch(model, tokenizer, data, epoch, optimizer, scaler, scheduler,
             batch_time_m.reset()
             data_time_m.reset()
         
-        eval_point = int(num_batches_per_epoch/5)
-        if step>0 and step%eval_point ==0:
+        eval_point = int(num_batches_per_epoch/2)
+        if step>0 and eval_point > 0 and step%eval_point ==0:
             if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
                 torch.cuda.empty_cache()
                 model.train()
@@ -403,7 +403,7 @@ def evaluate(model, tokenizer, data, epoch, args, tb_writer=None):
 
     logging.info(
         f"Eval Epoch: {epoch} "
-        + "\t".join([f"{k}: {round(v, 4):.4f}" for k, v in metrics.items()])
+        + "\t".join([f"{k}: {round(float(v), 4):.4f}" for k, v in metrics.items()])
     )
 
     if args.save_logs:
@@ -411,14 +411,26 @@ def evaluate(model, tokenizer, data, epoch, args, tb_writer=None):
             if tb_writer is not None:
                 tb_writer.add_scalar(f"val/{name}", val, epoch)
 
+        # Convert tensor values to Python scalars for JSON serialization
+        serializable_metrics = {}
+        for k, v in metrics.items():
+            if torch.is_tensor(v):
+                serializable_metrics[k] = float(v.detach().cpu())
+            else:
+                serializable_metrics[k] = v
+        
         with open(os.path.join(args.checkpoint_path, "results.jsonl"), "a+") as f:
-            f.write(json.dumps(metrics))
+            f.write(json.dumps(serializable_metrics))
             f.write("\n")
 
     if args.wandb:
         assert wandb is not None, 'Please install wandb.'
         for name, val in metrics.items():
-            wandb.log({f"val/{name}": val, 'epoch': epoch})
+            # Convert tensor values to Python scalars for wandb logging
+            if torch.is_tensor(val):
+                wandb.log({f"val/{name}": float(val.detach().cpu()), 'epoch': epoch})
+            else:
+                wandb.log({f"val/{name}": val, 'epoch': epoch})
 
     return metrics
 

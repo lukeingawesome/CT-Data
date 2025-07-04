@@ -503,7 +503,7 @@ def parse_args(args):
         "--grad-clip-norm", type=float, default=None, help="Gradient clip."
     )
     parser.add_argument(
-        "--grad-accumulation-steps", type=int, default=1, help="Gradient accumulation steps; only support deepspeed now."
+        "--grad-accumulation-steps", type=int, default=16, help="Gradient accumulation steps for both regular training and DeepSpeed."
     )
     parser.add_argument(
         "--lock-text",

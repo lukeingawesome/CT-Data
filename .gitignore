@@ -50,4 +50,4 @@ tensorboard/
 
 deepseek.py
 gemini.py
-wandb/*
+wandb/latest-run

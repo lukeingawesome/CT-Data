@@ -30,7 +30,7 @@ from training.optim import create_optimizer, get_all_parameters
 from llm2vec_wrapper import LLM2VecWrapper as LLM2Vec
 from transformers import AutoTokenizer, AutoModel
 from ct_transform import get_train_transform, get_val_transform
-
+from peft import LoraConfig, get_peft_model, TaskType
 # Add imports for Merlin instead of BioVIL-T
 from merlin import Merlin
 
@@ -45,8 +45,8 @@ class ModelWithCustomVisual(nn.Module):
         self.vision_projection = vision_projection
         
         # Initialize learnable logit_scale and logit_bias
-        self.logit_scale = nn.Parameter(torch.ones([]) * torch.log10(torch.tensor(10.0)))
-        self.logit_bias = nn.Parameter(torch.ones([]) * -10.0)
+        self.logit_scale = nn.Parameter(torch.tensor(10.0))   # linear scale = 10
+        self.logit_bias  = nn.Parameter(torch.tensor(-10.0))
         
         # Set output dimensions for projected features
         # Both vision and text will project to 1280 dimensions
@@ -248,7 +248,40 @@ def main(args):
 
     # Replace the text model with our wrapped version
     text_model = LLM2VecWithProjection(text_model, text_projection_layer)
-        
+
+
+
+    # ## Add PEFT
+    # # text_model is your LLM2Vec wrapper – grab the underlying HF model
+    # hf_text_model = text_model.model           # Llama in your wrapper
+
+    # # ----------------------------------------------------------------
+    # # 1.  Define where to inject LoRA. For Llama‑based models the
+    # #     canonical target modules are q_proj, k_proj, v_proj, o_proj.
+    # # ----------------------------------------------------------------
+    # lora_cfg = LoraConfig(
+    #     r=16,                    # rank
+    #     lora_alpha=32,
+    #     lora_dropout=0.05,
+    #     bias="none",
+    #     task_type=TaskType.FEATURE_EXTRACTION,
+    #     target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+    # )
+
+    # # ----------------------------------------------------------------
+    # # 2.  Wrap the model with PEFT.  This inserts LoRA layers and
+    # #     automatically freezes the base weights (only LoRA params
+    # #     have requires_grad = True).
+    # # ----------------------------------------------------------------
+    # hf_text_model = get_peft_model(hf_text_model, lora_cfg)
+    # hf_text_model.print_trainable_parameters()   # sanity‑check
+
+    # # ----------------------------------------------------------------
+    # # 3.  Put the PEFT‑wrapped model back into your LLM2Vec wrapper.
+    # # ----------------------------------------------------------------
+    # text_model.model = hf_text_model
+
+
     # Convert any float32 parameters to float16
     model = ModelWithCustomVisual(visual_model, text_model, vision_projection_layer)
     
@@ -280,7 +313,7 @@ def main(args):
             freeze_bn_stats=args.lock_image_freeze_bn_stats)
 
     if args.grad_checkpointing:
-        if args.llm2vec_path:
+        if args.model_pth:
             # Check if the visual model has the grad_checkpointing method
             if hasattr(model.visual, 'set_grad_checkpointing'):
                 model.visual.set_grad_checkpointing()
@@ -508,6 +541,9 @@ def main(args):
 
     if args.wandb and is_master(args) and wandb is not None:
         wandb.finish()
+
+    for name, param in model.named_parameters():
+        print(f"{name}: requires_grad={param.requires_grad}")
 
 if __name__ == "__main__":
     main(sys.argv[1:])
