@@ -33,6 +33,18 @@ docker compose up -d
 - Verify volume mounts are correctly configured
 - The container is configured for 6 NVIDIA GPUs with 64GB shared memory
 
+#### Install LLM2Vec4CXR
+
+After starting the Docker container, install the LLM2Vec4CXR package:
+
+```bash
+git clone https://github.com/lukeingawesome/llm2vec4cxr.git
+cd llm2vec4cxr
+pip install -e .
+```
+
+This installs the LLM2Vec4CXR package in development mode, which provides the LLM2Vec models for chest X-ray report analysis used in this project.
+
 ### 2. Data Preprocessing
 
 The preprocessing pipeline is implemented in `preprocess.py`:
@@ -151,7 +163,7 @@ This codebase supports:
 
 ## 📄 License
 
-[Add your license information here]
+?
 
 ## 🙏 Acknowledgments
 
@@ -162,7 +174,7 @@ This codebase supports:
 
 ## 📞 Contact
 
-[Add your contact information here]
+lucasko1994@snu.ac.kr
 
 ---
 

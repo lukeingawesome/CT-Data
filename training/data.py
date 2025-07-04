@@ -47,7 +47,7 @@ warnings.filterwarnings("ignore")
 ImageFile.LOAD_TRUNCATED_IMAGES = True # Truncated File Read
 Image.MAX_IMAGE_PIXELS = None # DecompressionBombWarning
 
-def shuffle_sentences(text, probability=0.5):
+def shuffle_sentences(text, probability=0.2):
     # Split the text into sentences using a regex to account for periods that end sentences
     import re
     sentences = re.split(r'(?<=[.!?])\s+', text)
@@ -64,7 +64,7 @@ def shuffle_sentences(text, probability=0.5):
 class CustomCSVDataset(Dataset):
     def __init__(self, csv_file, transform=None, img_key='image_path', caption_key='caption', 
                  tokenizer=None, is_train=True, dataset_mode='cxr', split=None, split_column='split',
-                 separator="!@#$%^&*()", use_3channel=False):
+                 separator="!@#$%^&*()", use_3channel=True):
         """
         Flexible CSV dataset that supports both CXR temporal data and CT single scan data.
         
@@ -504,7 +504,7 @@ def get_retrieval_dataset(args, preprocess_fn, is_train=False, tokenizer=None,
         caption_key = getattr(args, 'csv_caption_key', 'findings')
         split_column = getattr(args, 'split_column', 'split')
         separator = getattr(args, 'text_separator', '!@#$%^&*()')
-        use_3channel = getattr(args, 'use_3channel', False)
+        use_3channel = getattr(args, 'use_3channel', True)
     else:
         # CXR mode parameters (default)
         split = None
@@ -512,7 +512,7 @@ def get_retrieval_dataset(args, preprocess_fn, is_train=False, tokenizer=None,
         img_key = args.csv_img_key
         caption_key = args.csv_caption_key
         separator = getattr(args, 'text_separator', '!@#$%^&*()')
-        use_3channel = False
+        use_3channel = True
     
     dataset = CustomCSVDataset(
         csv_file=input_filename,
@@ -557,7 +557,7 @@ def get_ct_dataset(args, preprocess_fn, is_train, epoch=0, tokenizer=None):
     caption_key = getattr(args, 'csv_caption_key', 'findings')
     split_column = getattr(args, 'split_column', 'split')
     separator = getattr(args, 'text_separator', '!@#$%^&*()')
-    use_3channel = getattr(args, 'use_3channel', False)
+    use_3channel = getattr(args, 'use_3channel', True)
     
     dataset = CustomCSVDataset(
         csv_file=input_filename,

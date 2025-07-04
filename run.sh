@@ -3,7 +3,7 @@ python3 -m torch.distributed.launch --nproc_per_node=6 \
         --enable-deepspeed \
         --grad-accumulation-steps 1 \
         --grad-checkpointing \
-        --name="Test1" \
+        --name="Test1-3chan" \
         --local-loss \
         --save-frequency 4  \
         --zeroshot-frequency 1 \

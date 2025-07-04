@@ -57,7 +57,9 @@ class I3ResNet(torch.nn.Module):
     def forward(self, x):
         skips = []
         x = x.permute(0, 1, 4, 2, 3)
-        x = torch.cat((x, x, x), dim=1)
+        # Only concatenate if input doesn't already have 3 channels
+        if x.shape[1] != 3:
+            x = torch.cat((x, x, x), dim=1)
         if self.return_skips:
             skips.append(x.permute(0, 1, 3, 4, 2))
         x = self.conv1(x)
