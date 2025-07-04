@@ -25,7 +25,23 @@ except ImportError:
     MonaiDataLoader = DataLoader
 # -------------------------------------------------
 
+import numbers
 
+# -------- HU window utilities --------
+def _hu_window_to_unit(volume: np.ndarray,
+                       center: float,
+                       width: float) -> np.ndarray:
+    """
+    Clip a HU volume to the given window and scale to [0,1].
+    Args
+        volume : raw HU ndarray, shape (D,H,W) or (C,D,H,W)
+        center : window centre in HU
+        width  : window width in HU
+    """
+    lower, upper = center - width / 2.0, center + width / 2.0
+    vol = np.clip(volume, lower, upper)
+    return (vol - lower) / (upper - lower)
+    
 import warnings
 warnings.filterwarnings("ignore")
 ImageFile.LOAD_TRUNCATED_IMAGES = True # Truncated File Read
@@ -48,7 +64,7 @@ def shuffle_sentences(text, probability=0.5):
 class CustomCSVDataset(Dataset):
     def __init__(self, csv_file, transform=None, img_key='image_path', caption_key='caption', 
                  tokenizer=None, is_train=True, dataset_mode='cxr', split=None, split_column='split',
-                 separator=" [SEP] "):
+                 separator="!@#$%^&*()", use_3channel=False):
         """
         Flexible CSV dataset that supports both CXR temporal data and CT single scan data.
         
@@ -80,6 +96,10 @@ class CustomCSVDataset(Dataset):
         self.dataset_mode = dataset_mode.lower()
         self.max_length = 512
         self.separator = separator
+        self.use_3channel = use_3channel
+        
+        # Set expected shape for CT error handling
+        self.expected_shape = self._get_expected_shape()
         
         # Validate required columns based on dataset mode
         if self.dataset_mode == 'cxr':
@@ -95,6 +115,25 @@ class CustomCSVDataset(Dataset):
             if missing_cols:
                 raise ValueError(f"Missing required CT columns: {missing_cols}")
         
+    def _get_expected_shape(self):
+        """Get the expected shape after transforms for CT data."""
+        if self.use_3channel:
+            # 3-channel mode: (3, D, H, W)
+            if self.transform and hasattr(self.transform, 'target_size'):
+                return (3, *self.transform.target_size)
+            elif self.transform and hasattr(self.transform, 'spatial_size'):
+                return (3, *self.transform.spatial_size)
+            else:
+                return (3, 160, 224, 224)
+        else:
+            # Single channel mode: (1, D, H, W)
+            if self.transform and hasattr(self.transform, 'target_size'):
+                return (1, *self.transform.target_size)
+            elif self.transform and hasattr(self.transform, 'spatial_size'):
+                return (1, *self.transform.spatial_size)
+            else:
+                return (1, 160, 224, 224)
+    
     def __len__(self):
         return len(self.data_frame)
     
@@ -133,7 +172,7 @@ class CustomCSVDataset(Dataset):
             cur_image = self.transform(cur_image)
         
         return prev_image, cur_image, caption, hard_caption, oid, label
-    
+
     def _get_ct_item(self, row, idx):
         """Get CT single scan item with enhanced NPZ loading and validation."""
         img_path = row[self.img_key]
@@ -164,21 +203,43 @@ class CustomCSVDataset(Dataset):
                     
                     if arr.shape[0] < 1:
                         raise ValueError(f"Expected at least 1 channel, got {arr.shape[0]} in {img_path}")
-                    
+
+                    if self.use_3channel:
+                        if arr.max() <= 1.0:                         # heuristic
+                            arr = arr * 2500.0 - 1000.0              # back‑to‑HU
+
+                        # arr shape: (C,D,H,W) or (D,H,W); unify to (D,H,W)
+                        if arr.ndim == 4:
+                            arr = arr[0]        # assume first channel is full‑range HU
+
+                        # ----------------------------------------------------------
+                        # 2.  Generate three standard windows
+                        #    lung (centre -600, width 1500)
+                        #    mediastinum (centre  40, width  400)
+                        #    bone (centre 700, width 2000)
+                        # ----------------------------------------------------------
+                        lung  = _hu_window_to_unit(arr,  -600, 1500)
+                        medi  = _hu_window_to_unit(arr,    40,  400)
+                        bone  = _hu_window_to_unit(arr,   700, 2000)
+
+                        multi = np.stack([lung, medi, bone], axis=0)      # (3,D,H,W)
+                        image = torch.from_numpy(multi).float()           # torch tensor
+
+                    else:
                     # Convert to tensor with proper dtype
-                    image = torch.from_numpy(arr.copy()).float()  # cast to float32 for gradients
-                    
-                    # Log volume info for debugging (only occasionally to avoid spam)
+                        image = torch.from_numpy(arr.copy()).float()  # cast to float32 for gradients
+                        
+                        # Log volume info for debugging (only occasionally to avoid spam)
                     if idx % 100 == 0 and hasattr(self, '_debug_logging'):
                         print(f"Loaded CT volume {idx}: shape={image.shape}, "
-                              f"dtype={image.dtype}, range=[{image.min():.2f}, {image.max():.2f}]")
-                
-                # Apply CT-specific transforms if provided
-                if self.transform:
-                    try:
-                        image = self.transform(image)
-                    except Exception as e:
-                        raise RuntimeError(f"Transform failed for {img_path}: {e}")
+                            f"dtype={image.dtype}, range=[{image.min():.2f}, {image.max():.2f}]")
+                    
+                    # Apply CT-specific transforms if provided
+                    if self.transform:
+                        try:
+                            image = self.transform(image)
+                        except Exception as e:
+                            raise RuntimeError(f"Transform failed for {img_path}: {e}")
                 
             else:
                 # Fallback for regular image files (though not typical for CT)
@@ -194,10 +255,7 @@ class CustomCSVDataset(Dataset):
                 # During training, log error but continue with a dummy sample
                 print(f"Warning: {error_msg}")
                 # Create a zero tensor with expected shape after transforms
-                expected_shape = (1, 224, 224, 160)  # (C, H, W, D)
-                if self.transform and hasattr(self.transform, 'target_size'):
-                    expected_shape = (1, *self.transform.target_size)
-                image = torch.zeros(expected_shape, dtype=torch.float32)
+                image = torch.zeros(self.expected_shape, dtype=torch.float32)
                 caption = "Error loading medical scan"
             else:
                 # During validation/testing, raise the error
@@ -284,6 +342,36 @@ class CustomCSVDataset(Dataset):
             
             images.append(image)
             captions.append(text)
+        
+        # Check for shape consistency before stacking
+        shapes = [img.shape for img in images]
+        unique_shapes = set(shapes)
+        
+        if len(unique_shapes) > 1:
+            # Find the most common shape and use it as target
+            from collections import Counter
+            shape_counts = Counter(shapes)
+            target_shape = shape_counts.most_common(1)[0][0]
+            
+            # Resize mismatched tensors to target shape
+            resized_images = []
+            for i, (img, shape) in enumerate(zip(images, shapes)):
+                if shape != target_shape:
+                    print(f"Warning: Resizing tensor {i} from {shape} to {target_shape}")
+                    # Use interpolation to resize the tensor
+                    if img.dim() == 4:  # (C, D, H, W)
+                        resized_img = torch.nn.functional.interpolate(
+                            img.unsqueeze(0),  # Add batch dimension
+                            size=target_shape[1:],  # (D, H, W)
+                            mode='trilinear',
+                            align_corners=False
+                        ).squeeze(0)  # Remove batch dimension
+                    else:
+                        resized_img = img
+                    resized_images.append(resized_img)
+                else:
+                    resized_images.append(img)
+            images = resized_images
         
         # Stack images with error handling
         try:
@@ -416,6 +504,7 @@ def get_retrieval_dataset(args, preprocess_fn, is_train=False, tokenizer=None,
         caption_key = getattr(args, 'csv_caption_key', 'findings')
         split_column = getattr(args, 'split_column', 'split')
         separator = getattr(args, 'text_separator', '!@#$%^&*()')
+        use_3channel = getattr(args, 'use_3channel', False)
     else:
         # CXR mode parameters (default)
         split = None
@@ -423,6 +512,7 @@ def get_retrieval_dataset(args, preprocess_fn, is_train=False, tokenizer=None,
         img_key = args.csv_img_key
         caption_key = args.csv_caption_key
         separator = getattr(args, 'text_separator', '!@#$%^&*()')
+        use_3channel = False
     
     dataset = CustomCSVDataset(
         csv_file=input_filename,
@@ -434,7 +524,8 @@ def get_retrieval_dataset(args, preprocess_fn, is_train=False, tokenizer=None,
         dataset_mode=dataset_mode,
         split=split,
         split_column=split_column,
-        separator=separator)
+        separator=separator,
+        use_3channel=use_3channel)
     
     num_samples = len(dataset)
     sampler = DistributedSampler(dataset) if args.distributed and is_train else None
@@ -466,6 +557,7 @@ def get_ct_dataset(args, preprocess_fn, is_train, epoch=0, tokenizer=None):
     caption_key = getattr(args, 'csv_caption_key', 'findings')
     split_column = getattr(args, 'split_column', 'split')
     separator = getattr(args, 'text_separator', '!@#$%^&*()')
+    use_3channel = getattr(args, 'use_3channel', False)
     
     dataset = CustomCSVDataset(
         csv_file=input_filename,
@@ -477,7 +569,8 @@ def get_ct_dataset(args, preprocess_fn, is_train, epoch=0, tokenizer=None):
         dataset_mode='ct',
         split=split,
         split_column=split_column,
-        separator=separator)
+        separator=separator,
+        use_3channel=use_3channel)
     
     num_samples = len(dataset)
     sampler = DistributedSampler(dataset) if args.distributed and is_train else None

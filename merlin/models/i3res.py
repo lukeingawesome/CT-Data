@@ -84,7 +84,7 @@ class I3ResNet(torch.nn.Module):
             x_features = self.avgpool(x)
             
             if self.ImageEmbedding:
-                return x_features.squeeze(2).squeeze(2).squeeze(2).unsqueeze(0)
+                return x_features.squeeze(2).squeeze(2).squeeze(2)
             
             x_ehr = self.classifier(x_features)
             x_ehr = x_ehr.squeeze(3)

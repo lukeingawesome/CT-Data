@@ -1,8 +1,9 @@
 python3 -m torch.distributed.launch --nproc_per_node=6 \
 	--use_env training/main.py \
         --enable-deepspeed \
+        --grad-accumulation-steps 1 \
         --grad-checkpointing \
-        --name="TOY-CT" \
+        --name="Test1" \
         --local-loss \
         --save-frequency 4  \
         --zeroshot-frequency 1 \
@@ -12,7 +13,7 @@ python3 -m torch.distributed.launch --nproc_per_node=6 \
         --train-data "./csv/all_ct.csv" \
         --val-data "./csv/all_ct.csv" \
         --precision "bf16" \
-        --warmup 100 \
+        --warmup 1000 \
         --batch-size=12 \
         --eval-batch-size=12 \
         --tila-loss 1 \
