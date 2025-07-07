@@ -3,9 +3,9 @@ python3 -m torch.distributed.launch --nproc_per_node=6 \
         --enable-deepspeed \
         --grad-accumulation-steps 1 \
         --grad-checkpointing \
-        --name="Test1-3chan" \
+        --name="Test1-1chan-highaffine" \
         --local-loss \
-        --save-frequency 4  \
+        --save-frequency 6  \
         --zeroshot-frequency 1 \
         --report-to="tensorboard, wandb" \
         --wandb-project-name="CT-SIGLIP" \
