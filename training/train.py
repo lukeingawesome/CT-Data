@@ -92,13 +92,26 @@ def get_grad_norm_(parameters, norm_type: float = 2.0) -> torch.Tensor:
     norm_type = float(norm_type)
     if len(parameters) == 0:
         return torch.tensor(0.)
-    device = parameters[0].grad.device
+    
+    # Safe access to grad after filtering
+    first_grad = parameters[0].grad
+    if first_grad is None:
+        return torch.tensor(0.)
+    device = first_grad.device
+    
     if norm_type == inf:
         # Convert generator to list for max function
-        norms = [p.grad.detach().abs().max().to(device) for p in parameters]
-        total_norm = max(norms)
+        norms = []
+        for p in parameters:
+            if p.grad is not None:
+                norms.append(p.grad.detach().abs().max().to(device))
+        total_norm = norms[0] if len(norms) == 1 else torch.stack(norms).max()
     else:
-        total_norm = torch.norm(torch.stack([torch.norm(p.grad.detach(), norm_type).to(device) for p in parameters]), norm_type)
+        grad_norms = []
+        for p in parameters:
+            if p.grad is not None:
+                grad_norms.append(torch.norm(p.grad.detach(), norm_type).to(device))
+        total_norm = torch.norm(torch.stack(grad_norms), norm_type)
     return total_norm.to(dtype=torch.float32)
 
 def train_one_epoch(model, tokenizer, data, epoch, optimizer, scaler, scheduler, args, tb_writer=None):

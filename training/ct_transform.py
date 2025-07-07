@@ -1,10 +1,8 @@
-from monai.transforms import (
-    Compose, EnsureType,
-    RandSpatialCrop, CenterSpatialCrop,
-    RandAffine,
-    RandShiftIntensity, RandGaussianNoise,
-    Lambda
-)
+from monai.transforms.compose import Compose
+from monai.transforms.utility.array import EnsureType, Lambda
+from monai.transforms.croppad.array import RandSpatialCrop, CenterSpatialCrop
+from monai.transforms.spatial.array import RandAffine
+from monai.transforms.intensity.array import RandShiftIntensity, RandGaussianNoise
 
 TARGET_SIZE = (160, 224, 224)             # (D, H, W)
 

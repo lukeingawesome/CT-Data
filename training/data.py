@@ -64,7 +64,7 @@ def shuffle_sentences(text, probability=0.2):
 class CustomCSVDataset(Dataset):
     def __init__(self, csv_file, transform=None, img_key='image_path', caption_key='caption', 
                  tokenizer=None, is_train=True, dataset_mode='cxr', split=None, split_column='split',
-                 separator="!@#$%^&*()", use_3channel=True):
+                 separator="!@#$%^&*()", use_3channel=False):
         """
         Flexible CSV dataset that supports both CXR temporal data and CT single scan data.
         
@@ -162,7 +162,7 @@ class CustomCSVDataset(Dataset):
         label = row.get('label', 0)
         
         if self.is_train:
-            caption = shuffle_sentences(caption, probability=0.2)
+            caption = shuffle_sentences(caption, probability=0.1)
         
         # Load and process images
         prev_image = load_image(prev_path)
@@ -218,9 +218,9 @@ class CustomCSVDataset(Dataset):
                         #    mediastinum (centre  40, width  400)
                         #    bone (centre 700, width 2000)
                         # ----------------------------------------------------------
-                        lung  = _hu_window_to_unit(arr,  -600, 1500)
+                        lung  = _hu_window_to_unit(arr,  -600, 1000)
                         medi  = _hu_window_to_unit(arr,    40,  400)
-                        bone  = _hu_window_to_unit(arr,   700, 2000)
+                        bone  = _hu_window_to_unit(arr,   700, 1500)
 
                         multi = np.stack([lung, medi, bone], axis=0)      # (3,D,H,W)
                         image = torch.from_numpy(multi).float()           # torch tensor
@@ -272,7 +272,7 @@ class CustomCSVDataset(Dataset):
         
         # Apply text augmentation for training
         if self.is_train:
-            caption = shuffle_sentences(caption, probability=0.2)
+            caption = shuffle_sentences(caption, probability=0.4)
         
         # Create metadata (optional, can be useful for debugging)
         meta = {
@@ -504,7 +504,7 @@ def get_retrieval_dataset(args, preprocess_fn, is_train=False, tokenizer=None,
         caption_key = getattr(args, 'csv_caption_key', 'findings')
         split_column = getattr(args, 'split_column', 'split')
         separator = getattr(args, 'text_separator', '!@#$%^&*()')
-        use_3channel = getattr(args, 'use_3channel', True)
+        use_3channel = getattr(args, 'use_3channel', False)
     else:
         # CXR mode parameters (default)
         split = None
@@ -512,7 +512,7 @@ def get_retrieval_dataset(args, preprocess_fn, is_train=False, tokenizer=None,
         img_key = args.csv_img_key
         caption_key = args.csv_caption_key
         separator = getattr(args, 'text_separator', '!@#$%^&*()')
-        use_3channel = True
+        use_3channel = False
     
     dataset = CustomCSVDataset(
         csv_file=input_filename,
@@ -557,7 +557,7 @@ def get_ct_dataset(args, preprocess_fn, is_train, epoch=0, tokenizer=None):
     caption_key = getattr(args, 'csv_caption_key', 'findings')
     split_column = getattr(args, 'split_column', 'split')
     separator = getattr(args, 'text_separator', '!@#$%^&*()')
-    use_3channel = getattr(args, 'use_3channel', True)
+    use_3channel = getattr(args, 'use_3channel', False)
     
     dataset = CustomCSVDataset(
         csv_file=input_filename,
