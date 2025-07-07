@@ -51,3 +51,32 @@ tensorboard/
 deepseek.py
 gemini.py
 wandb/latest-run
+
+# Testing artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+.tox/
+test-requirements-installed.flag
+
+# CI/CD artifacts
+bandit-report.json
+benchmark-results.json
+.github/workflows/test-reports/
+
+# IDE test configurations
+.vscode/settings.json
+.idea/runConfigurations/
+
+# Performance test results
+.benchmarks/
+
+# Security scan results
+safety-report.json
+bandit-report.txt
+
+# Temporary test files
+tests/temp_*
+tests/fixtures/temp_*
