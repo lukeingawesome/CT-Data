@@ -26,9 +26,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.metrics import f1_score, precision_recall_fscore_support, roc_auc_score
 from torch.cuda.amp import GradScaler, autocast
-from torch.optim import AdamW, SGD
+from torch.optim.adamw import AdamW
+from torch.optim.sgd import SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR, ReduceLROnPlateau
-from transformers import get_cosine_schedule_with_warmup
+from transformers.optimization import get_cosine_schedule_with_warmup
 
 try:
     from torch.optim.swa_utils import AveragedModel, update_bn
@@ -848,6 +849,15 @@ def main():
     )
     model.to(device)
     
+    # Multi-GPU support with DataParallel
+    if torch.cuda.device_count() > 1 and not args.test_only:
+        model = nn.DataParallel(model)
+        logger.info(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
+    elif torch.cuda.is_available():
+        logger.info(f"Using single GPU: {torch.cuda.get_device_name(0)}")
+    else:
+        logger.info("Using CPU")
+    
     # Compile model for better performance (PyTorch 2.0+)
     if hasattr(torch, 'compile') and not args.test_only:
         try:
@@ -893,7 +903,7 @@ def main():
         # Calculate positive weights from training data
         train_df = pd.read_csv(args.csv)
         train_df = train_df[train_df['split'] == 'train']
-        train_labels = train_df[args.label_columns].to_numpy()
+        train_labels = train_df[args.label_columns].values
         pos_weights = calculate_pos_weights(train_labels)
         criterion = BalancedBCELoss(pos_weights=pos_weights.to(device))
     else:
@@ -907,7 +917,7 @@ def main():
     
     # Create scheduler
     if args.scheduler == "plateau":
-        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5, verbose=False)
+        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)
         warmup_scheduler = None
     elif args.scheduler == "cosine":
         scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs)
@@ -919,7 +929,7 @@ def main():
         )
         warmup_scheduler = scheduler
     else:  # Default to plateau
-        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5, verbose=False)
+        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)
         warmup_scheduler = None
     
     # Mixed precision scaler

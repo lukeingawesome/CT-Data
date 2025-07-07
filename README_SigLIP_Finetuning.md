@@ -267,6 +267,21 @@ Use cosine learning rate schedule with warmup for better convergence:
 ### Model Compilation
 The script automatically uses torch.compile for 5-15% performance boost on compatible hardware (PyTorch 2.0+).
 
+### Multi-GPU Support
+The script automatically detects and uses multiple GPUs with DataParallel:
+- **Single GPU**: Uses one GPU efficiently
+- **Multiple GPUs**: Automatically wraps model with `nn.DataParallel` 
+- **CPU Fallback**: Falls back to CPU if no GPU available
+- **Automatic Detection**: No configuration needed, works out of the box
+
+```bash
+# Will automatically use all available GPUs
+python finetune_siglip.py --csv data.csv --pretrained model.bin --label-columns ...
+
+# GPU usage is logged during startup:
+# "Using 4 GPUs with DataParallel" or "Using single GPU: RTX 4090"
+```
+
 ## Monitoring Training
 
 ### Wandb Integration
@@ -315,9 +330,11 @@ The script automatically logs:
 
 1. **Use appropriate batch sizes**: Start with 8-16 for CT volumes
 2. **Enable mixed precision**: Use `--amp` for faster training
-3. **Tune learning rates**: Start with 1e-4, adjust based on convergence
-4. **Monitor validation metrics**: Use wandb for comprehensive tracking
-5. **Freeze layers gradually**: Start with `--freeze-up-to 0`, increase if overfitting
+3. **Multi-GPU scaling**: Batch size scales automatically with number of GPUs
+4. **Tune learning rates**: Start with 1e-4, adjust based on convergence
+5. **Monitor validation metrics**: Use wandb for comprehensive tracking
+6. **Freeze layers gradually**: Start with `--freeze-up-to 0`, increase if overfitting
+7. **Use EMA weights**: Add `--use-ema` for smoother convergence
 
 ## Citation
 
