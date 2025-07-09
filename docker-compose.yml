@@ -14,7 +14,7 @@ services:
         USERNAME:  ${USR:-user}
 
     image: irail:ct_fm
-    container_name: ct
+    container_name: ct_hanbin
 
     # ────────────────────────────────────────
     # Runtime behaviour
@@ -46,8 +46,11 @@ services:
     # ────────────────────────────────────────
     volumes:
       - .:${PROJECT_ROOT:-/opt/project}
-      - /BARO_Cluster/data/data:/data          # read‑only data
+      - /BARO_Cluster/data/data:/data2          # read‑only data
       - ${HOME}:/home/${USR:-user}             # home directory (ssh keys, etc.)
+      - /home/data:/data
+      - /home/model:/model
+
 
     working_dir: ${PROJECT_ROOT:-/opt/project}
 

@@ -201,12 +201,35 @@ def main(args):
         ckpt = torch.load(args.model_pth)
         text_model.load_state_dict(ckpt, strict=False)
     text_model.to(device)
+    
+    # Add LoRA configuration to the text model
+    lora_config = LoraConfig(
+        task_type=TaskType.FEATURE_EXTRACTION,
+        inference_mode=False,
+        r=32,  # rank
+        lora_alpha=32,  # scaling parameter
+        lora_dropout=0.1,
+        target_modules=["q_proj", "k_proj", "v_proj", "out_proj"],  # target attention modules
+        bias="none",
+    )
+    
+    # Apply LoRA only to the underlying transformer model, not the entire LLM2Vec
+    # Get the underlying transformer model from LLM2Vec
+    base_transformer = text_model.model
+    
+    # Apply PEFT to the transformer model
+    base_transformer = get_peft_model(base_transformer, lora_config)
+    
+    # Replace the transformer in the LLM2Vec model
+    text_model.model = base_transformer
 
     # Ensure projection layer uses the same dtype as the text model
     # Merlin outputs 2048-dimensional features, project to 1280 dimensions
+    # Access config from the LLM2Vec model (config is unchanged)
+    hidden_size = text_model.config.hidden_size
     text_projection_layer = nn.Sequential(
-            nn.LayerNorm(text_model.config.hidden_size),
-            nn.Linear(text_model.config.hidden_size, 1280)  # Project to 1280 dimensions
+            nn.LayerNorm(hidden_size),
+            nn.Linear(hidden_size, 1280)  # Project to 1280 dimensions
         ).to(device).to(torch.bfloat16)
     
     # Add vision projection layer to project Merlin's 2048 features to 1280 dimensions
@@ -222,17 +245,21 @@ def main(args):
             self.model = llm2vec_model
             self.projection = projection
                 
-            # Freeze the LLM model parameters
-            for param in self.model.parameters():
-                param.requires_grad = False
+            # Freeze the base LLM model parameters but keep LoRA parameters trainable
+            for name, param in self.model.named_parameters():
+                if "lora_" in name:
+                    param.requires_grad = True  # Keep LoRA parameters trainable
+                else:
+                    param.requires_grad = False  # Freeze base model parameters
                 
             # Ensure projection layer is trainable
             for param in self.projection.parameters():
                 param.requires_grad = True
 
         def forward(self, text):
-            with torch.no_grad():  # Ensure no gradients flow through the LLM
-                embeddings = self.model(text)
+            # Since we're using LoRA, we need to allow gradients to flow through LoRA parameters
+            # Remove the torch.no_grad() context and let gradients flow naturally
+            embeddings = self.model(text)
             # Ensure consistent dtype
             if embeddings.dtype != next(self.projection.parameters()).dtype:
                 embeddings = embeddings.to(next(self.projection.parameters()).dtype)
@@ -251,36 +278,6 @@ def main(args):
 
 
 
-    # ## Add PEFT
-    # # text_model is your LLM2Vec wrapper – grab the underlying HF model
-    # hf_text_model = text_model.model           # Llama in your wrapper
-
-    # # ----------------------------------------------------------------
-    # # 1.  Define where to inject LoRA. For Llama‑based models the
-    # #     canonical target modules are q_proj, k_proj, v_proj, o_proj.
-    # # ----------------------------------------------------------------
-    # lora_cfg = LoraConfig(
-    #     r=16,                    # rank
-    #     lora_alpha=32,
-    #     lora_dropout=0.05,
-    #     bias="none",
-    #     task_type=TaskType.FEATURE_EXTRACTION,
-    #     target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
-    # )
-
-    # # ----------------------------------------------------------------
-    # # 2.  Wrap the model with PEFT.  This inserts LoRA layers and
-    # #     automatically freezes the base weights (only LoRA params
-    # #     have requires_grad = True).
-    # # ----------------------------------------------------------------
-    # hf_text_model = get_peft_model(hf_text_model, lora_cfg)
-    # hf_text_model.print_trainable_parameters()   # sanity‑check
-
-    # # ----------------------------------------------------------------
-    # # 3.  Put the PEFT‑wrapped model back into your LLM2Vec wrapper.
-    # # ----------------------------------------------------------------
-    # text_model.model = hf_text_model
-
 
     # Convert any float32 parameters to float16
     model = ModelWithCustomVisual(visual_model, text_model, vision_projection_layer)
@@ -294,6 +291,18 @@ def main(args):
 
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logging.info(f'number of params with requires_grad: {n_parameters}')
+    
+    # Log LoRA parameters specifically
+    lora_parameters = sum(p.numel() for name, p in model.text.model.named_parameters() if "lora_" in name and p.requires_grad)
+    logging.info(f'number of trainable LoRA text params: {lora_parameters}')
+    
+    # Verify LoRA parameters exist and are trainable
+    lora_param_names = [name for name, param in model.text.model.named_parameters() if "lora_" in name and param.requires_grad]
+    if lora_param_names:
+        logging.info(f"Found {len(lora_param_names)} trainable LoRA parameters")
+        logging.info(f"Sample LoRA parameter names: {lora_param_names[:5]}")  # Show first 5
+    else:
+        logging.warning("No trainable LoRA parameters found! LoRA may not be working correctly.")
 
     if hasattr(model, 'visual'):
         total_visual_n_parameters = sum(p.numel() for p in model.visual.parameters())

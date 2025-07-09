@@ -3,9 +3,9 @@ python3 -m torch.distributed.launch --nproc_per_node=6 \
         --enable-deepspeed \
         --grad-accumulation-steps 1 \
         --grad-checkpointing \
-        --name="Test1-1chan-highaffine" \
+        --name="Test1-1chan-lora-refined" \
         --local-loss \
-        --save-frequency 6  \
+        --save-frequency 2  \
         --zeroshot-frequency 1 \
         --report-to="tensorboard, wandb" \
         --wandb-project-name="CT-SIGLIP" \
@@ -14,11 +14,10 @@ python3 -m torch.distributed.launch --nproc_per_node=6 \
         --val-data "./csv/all_ct.csv" \
         --precision "bf16" \
         --warmup 1000 \
-        --batch-size=12 \
-        --eval-batch-size=12 \
-        --tila-loss 1 \
+        --batch-size=10 \
+        --eval-batch-size=10 \
         --log-every-n-steps 1000 \
-        --epochs=30 \
+        --epochs=10 \
         --lr=1e-4 \
         --visual-lr=1e-4 \
         --text-lr=1e-4 \
