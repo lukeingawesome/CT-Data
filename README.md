@@ -171,6 +171,7 @@ This codebase supports:
 - MONAI framework for medical imaging
 - DeepSpeed for distributed training
 - LLM2Vec for text encoding
+- Merlin for Image Encoder (CT)
 
 ## 📞 Contact
 

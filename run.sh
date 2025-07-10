@@ -3,7 +3,7 @@ python3 -m torch.distributed.launch --nproc_per_node=6 \
         --enable-deepspeed \
         --grad-accumulation-steps 1 \
         --grad-checkpointing \
-        --name="Test1-1chan-lora-refined" \
+        --name="Test1-1chan-lora-final" \
         --local-loss \
         --save-frequency 2  \
         --zeroshot-frequency 1 \
@@ -30,7 +30,7 @@ python3 -m torch.distributed.launch --nproc_per_node=6 \
         --visual-ld=1.0 \
         --grad-clip-norm=5.0 \
         --smoothing=0. \
-        --model-pth "/data/research/checkpoint-4896/pytorch_model.bin" \
+        --model-pth "/data2/research/checkpoint-4896/pytorch_model.bin" \
         --workers=4 \
         --seed 4096 \
         --gather-with-grad \

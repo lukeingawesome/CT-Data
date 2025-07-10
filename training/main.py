@@ -27,9 +27,9 @@ from training.params import parse_args
 from training.scheduler import warmup_cosine_lr
 from training.train import train_one_epoch, evaluate, extract_features
 from training.optim import create_optimizer, get_all_parameters
-from llm2vec_wrapper import LLM2VecWrapper as LLM2Vec
+from training.llm2vec_wrapper import LLM2VecWrapper as LLM2Vec
 from transformers import AutoTokenizer, AutoModel
-from ct_transform import get_train_transform, get_val_transform
+from training.ct_transform import get_train_transform, get_val_transform
 from peft import LoraConfig, get_peft_model, TaskType
 # Add imports for Merlin instead of BioVIL-T
 from merlin import Merlin
@@ -100,7 +100,7 @@ def random_seed(seed=42, rank=0):
 def get_ct_transforms(target_size=(224, 224, 160)):
     """Get CT transforms for training and validation."""
     # Import the transform functions
-    from ct_transform import get_train_transform, get_val_transform
+    from training.ct_transform import get_train_transform, get_val_transform
     
     # Return the actual transform functions (not the function references)
     return get_train_transform(), get_val_transform()

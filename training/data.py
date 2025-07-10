@@ -19,7 +19,7 @@ try:
     import monai
     from monai.data.dataloader import DataLoader as MonaiDataLoader
     MONAI_AVAILABLE = True
-    from ct_transform import get_train_transform, get_val_transform
+    from training.ct_transform import get_train_transform, get_val_transform
 except ImportError:
     MONAI_AVAILABLE = False
     MonaiDataLoader = DataLoader
@@ -195,11 +195,11 @@ class CustomCSVDataset(Dataset):
                     if "image" not in npz_file:
                         raise KeyError(f"'image' key not found in NPZ file: {img_path}")
                     
-                    arr = npz_file["image"]  # (C, D, H, W) float16/32
+                    arr = npz_file["image"]  # (C, H, W, D) float16/32
                     
                     # Validate array shape
                     if arr.ndim != 4:
-                        raise ValueError(f"Expected 4D array (C, D, H, W), got {arr.ndim}D in {img_path}")
+                        raise ValueError(f"Expected 4D array (C, H, W, D), got {arr.ndim}D in {img_path}")
                     
                     if arr.shape[0] < 1:
                         raise ValueError(f"Expected at least 1 channel, got {arr.shape[0]} in {img_path}")
@@ -208,7 +208,6 @@ class CustomCSVDataset(Dataset):
                         if arr.max() <= 1.0:                         # heuristic
                             arr = arr * 2500.0 - 1000.0              # back‑to‑HU
 
-                        # arr shape: (C,D,H,W) or (D,H,W); unify to (D,H,W)
                         if arr.ndim == 4:
                             arr = arr[0]        # assume first channel is full‑range HU
 

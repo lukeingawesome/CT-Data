@@ -405,6 +405,7 @@ def evaluate(model, tokenizer, data, epoch, args, tb_writer=None):
                 logit_scale=logit_scale.cpu(),
                 epoch=epoch,
                 oids=total_oids,
+                logit_bias=model.logit_bias,
             )
             loss = cumulative_loss / num_samples
             metrics.update(
@@ -447,13 +448,21 @@ def evaluate(model, tokenizer, data, epoch, args, tb_writer=None):
 
     return metrics
 
-def get_metrics(image_features, text_features, logit_scale, epoch, oids=None):
+def get_metrics(image_features, text_features, logit_scale, epoch, oids=None, logit_bias=None):
     metrics = {}
     # Normalize embeddings for retrieval metrics calculation
     image_features = F.normalize(image_features, dim=-1)
     text_features = F.normalize(text_features, dim=-1)
     
-    logits_per_image = (logit_scale * image_features @ text_features.t()).detach().cpu()
+    # Compute similarity matrices using both logit_scale and logit_bias like in training loss
+    logits_per_image = (image_features @ text_features.t()).detach().cpu()
+    
+    if logit_scale is not None:
+        logits_per_image = logit_scale * logits_per_image
+    
+    if logit_bias is not None:
+        logits_per_image = logits_per_image + logit_bias.cpu()
+        
     logits_per_text = logits_per_image.t().detach().cpu()
 
     logits = {"image_to_text": logits_per_image, "text_to_image": logits_per_text}
